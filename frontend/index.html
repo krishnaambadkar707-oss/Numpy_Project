@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Signal Processor - NumPy Powered Studio</title>
+    <meta name="description" content="Modern web studio for audio signal processing using NumPy. Perform noise reduction, moving average smoothing, FFT frequency analysis, and MSE metrics in real time.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div class="app-background">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+
+    <!-- SERVER STATUS NOTIFICATION BANNER -->
+    <div id="server-status-banner" class="status-banner" style="display: none;"></div>
+
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M2 10v4M6 6v12M10 3v18M14 8v8M18 5v14M22 10v4" stroke-linecap="round" stroke-linejoin="round"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Audio Signal Processor</h1>
+                    <p class="subtitle">NumPy-Engineered DSP • Noise Reduction • FFT Spectrum • MSE Analytics</p>
+                </div>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-numpy">NumPy 1.24+</span>
+                <span class="badge badge-fastapi">FastAPI Engine</span>
+            </div>
+        </header>
+
+        <!-- MAIN DASHBOARD CONTENT -->
+        <main class="dashboard-grid">
+            <!-- LEFT COLUMN: CONTROLS & INPUT -->
+            <section class="panel control-panel">
+                <!-- AUDIO SOURCE SELECTION -->
+                <div class="panel-header">
+                    <h2><span class="step-num">1</span> Audio Input</h2>
+                </div>
+                
+                <div class="drop-zone" id="drop-zone">
+                    <input type="file" id="audio-file-input" accept=".wav" hidden>
+                    <div class="drop-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                    </div>
+                    <p class="drop-text">Drag & drop a <strong>.WAV</strong> audio file here</p>
+                    <p class="drop-subtext">or click to browse your local device</p>
+                    <button class="btn btn-secondary" id="btn-browse">Browse Files</button>
+                </div>
+
+                <div class="divider"><span>OR</span></div>
+
+                <button class="btn btn-demo" id="btn-load-demo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3"/>
+                    </svg>
+                    Generate Demo Audio (Sine + Noise)
+                </button>
+
+                <!-- FILE METADATA DISPLAY -->
+                <div class="file-info-card" id="file-info-card" style="display: none;">
+                    <div class="file-name-row">
+                        <span class="file-icon">🎵</span>
+                        <span class="file-name" id="info-filename">demo.wav</span>
+                    </div>
+                    <div class="file-meta-grid">
+                        <div><span class="label">Sample Rate:</span> <strong id="info-samplerate">22,050 Hz</strong></div>
+                        <div><span class="label">Duration:</span> <strong id="info-duration">3.00 s</strong></div>
+                        <div><span class="label">Samples:</span> <strong id="info-samples">66,150</strong></div>
+                        <div><span class="label">Channels:</span> <strong id="info-channels">Mono (1)</strong></div>
+                    </div>
+                </div>
+
+                <!-- DSP PARAMETER CONTROLS -->
+                <div class="panel-header margin-top">
+                    <h2><span class="step-num">2</span> Processing Parameters</h2>
+                </div>
+
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <label for="slider-threshold">Noise Gate Threshold</label>
+                        <span class="slider-value" id="val-threshold">500</span>
+                    </div>
+                    <input type="range" id="slider-threshold" min="0" max="2000" step="10" value="500">
+                    <p class="slider-hint">Silences signal samples with absolute amplitude lower than this threshold.</p>
+                </div>
+
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <label for="slider-window">Moving Average Window</label>
+                        <span class="slider-value" id="val-window">5</span>
+                    </div>
+                    <input type="range" id="slider-window" min="1" max="31" step="2" value="5">
+                    <p class="slider-hint">Convolves array with a uniform 1D kernel to smooth sharp high-frequency transients.</p>
+                </div>
+
+                <button class="btn btn-primary" id="btn-process">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10"/>
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+                    </svg>
+                    Apply Process Filters
+                </button>
+            </section>
+
+            <!-- RIGHT COLUMN: ANALYTICS & VISUALIZATIONS -->
+            <section class="panel visual-panel">
+                <!-- AUDIO PLAYBACK COMPARISON -->
+                <div class="audio-playback-grid">
+                    <div class="audio-card">
+                        <h3>Original Audio</h3>
+                        <audio id="audio-player-original" controls class="custom-audio"></audio>
+                    </div>
+                    <div class="audio-card">
+                        <h3>Processed Audio</h3>
+                        <audio id="audio-player-processed" controls class="custom-audio"></audio>
+                    </div>
+                </div>
+
+                <!-- METRICS ANALYTICS CARDS -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-title">Max Amplitude</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val" id="metric-max-amp">--</span>
+                            <span class="metric-sub" id="metric-max-amp-orig">Orig: --</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-title">Mean DC Offset</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val" id="metric-mean">--</span>
+                            <span class="metric-sub" id="metric-mean-orig">Orig: --</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-title">Signal Variance</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val" id="metric-variance">--</span>
+                            <span class="metric-sub" id="metric-var-orig">Orig: --</span>
+                        </div>
+                    </div>
+                    <div class="metric-card metric-highlight">
+                        <span class="metric-title">Mean Squared Error (MSE)</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val text-gradient" id="metric-mse">--</span>
+                            <span class="metric-sub">Orig vs Processed</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WAVEFORM CANVAS CHART -->
+                <div class="chart-box">
+                    <div class="chart-header">
+                        <h3>Waveform Comparison (Original vs Processed)</h3>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="color-dot orig-dot"></span> Original Signal</span>
+                            <span class="legend-item"><span class="color-dot proc-dot"></span> Processed Signal</span>
+                        </div>
+                    </div>
+                    <div class="canvas-container">
+                        <canvas id="waveform-canvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- FREQUENCY SPECTRUM CANVAS CHART -->
+                <div class="chart-box">
+                    <div class="chart-header">
+                        <h3>Frequency Spectrum (FFT Magnitude)</h3>
+                        <span class="chart-subtitle">Fast Fourier Transform Bin Distribution</span>
+                    </div>
+                    <div class="canvas-container">
+                        <canvas id="fft-canvas"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
