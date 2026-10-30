@@ -171,11 +171,24 @@ python test_translate.py
 ### Docker Build & Run
 ```bash
 docker build -t audio-processor .
-docker run -p 8000:8000 -e WHISPER_MODEL=base audio-processor
+docker run -p 8000:10000 -e WHISPER_MODEL=tiny audio-processor
 ```
 
-### Render Deployment
-This project includes `render.yaml` preconfigured for Docker deployment (`runtime: docker`), ensuring FFmpeg system dependencies and CTranslate2 runtime libraries are containerized seamlessly.
+### Render Cloud Deployment
+This project is pre-configured to deploy on Render seamlessly via either **Docker** (recommended) or **Native Python**:
+
+1. **Option A: Docker Deployment (Recommended via `render.yaml`)**:
+   - In Render, click **New > Blueprint** and select your repository.
+   - Render automatically uses `render.yaml` with `runtime: docker` and sets `plan: free` with `WHISPER_MODEL=tiny` (optimized for Render's 512 MB RAM limit).
+2. **Option B: Manual Web Service**:
+   - In Render, click **New > Web Service**.
+   - If using **Docker Runtime**:
+     - Environment: `Docker`
+   - If using **Python Runtime**:
+     - Build Command: `pip install -r requirements.txt`
+     - Start Command: `python server.py`
+     - Add Environment Variable: `WHISPER_MODEL` = `tiny`
+   - Render routes traffic to port `10000` automatically. The server automatically binds to `0.0.0.0:$PORT`.
 
 ---
 

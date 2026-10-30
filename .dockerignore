@@ -1,0 +1,15 @@
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.git
+.gitignore
+.venv
+venv/
+env/
+.env
+*.wav
+*.mp3
+scratch/
+Microsoft/
+
