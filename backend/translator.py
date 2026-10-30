@@ -11,15 +11,50 @@ Provides:
 
 import os
 import sys
+import tempfile
 
-# Prevent OpenMP runtime crash (OMP: Error #15) on Windows / Anaconda environments
+# Configure writable paths for serverless / read-only file systems (e.g. Vercel, AWS Lambda)
+is_posix = os.name != "nt"
+tmp_base = "/tmp" if is_posix else os.environ.get("TEMP", os.environ.get("TMP", "C:/tmp"))
+
+# Ensure HOME is writable to prevent "Read-only file system (os error 30)"
+try:
+    user_home = os.path.expanduser("~")
+    if not os.path.exists(user_home) or not os.access(user_home, os.W_OK):
+        os.environ["HOME"] = tmp_base
+except Exception:
+    os.environ["HOME"] = tmp_base
+
+if is_posix and os.path.exists(tmp_base) and os.access(tmp_base, os.W_OK):
+    os.environ["HOME"] = tmp_base
+    os.environ["TMPDIR"] = tmp_base
+    os.environ["TEMP"] = tmp_base
+    os.environ["TMP"] = tmp_base
+    tempfile.tempdir = tmp_base
+
+hf_cache = os.path.join(tmp_base, "cache", "huggingface")
+try:
+    os.makedirs(hf_cache, exist_ok=True)
+    os.makedirs(os.path.join(hf_cache, "hub"), exist_ok=True)
+    os.makedirs(os.path.join(tmp_base, "whisper_models"), exist_ok=True)
+except Exception:
+    pass
+
+os.environ["HF_HOME"] = hf_cache
+os.environ["HF_HUB_CACHE"] = os.path.join(hf_cache, "hub")
+os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(hf_cache, "hub")
+os.environ["TRANSFORMERS_CACHE"] = os.path.join(tmp_base, "cache", "transformers")
+os.environ["TORCH_HOME"] = os.path.join(tmp_base, "cache", "torch")
+os.environ["XDG_CACHE_HOME"] = os.path.join(tmp_base, "cache")
+os.environ["XDG_CONFIG_HOME"] = os.path.join(tmp_base, "config")
+os.environ["XDG_DATA_HOME"] = os.path.join(tmp_base, "data")
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 import re
 import time
 import shutil
 import asyncio
-import tempfile
 import threading
 import subprocess
 from typing import Dict, Any, List, Optional, Tuple, Protocol
@@ -420,15 +455,19 @@ def get_whisper_model():
                         "pip install faster-whisper"
                     ) from e
 
-                model_size = os.environ.get("WHISPER_MODEL", "base")
+                model_size = os.environ.get("WHISPER_MODEL", "tiny" if (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")) else "base")
                 compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
                 device = os.environ.get("WHISPER_DEVICE", "cpu")
                 cpu_threads = min(4, os.cpu_count() or 1)
 
                 # Ensure download_root is writable in serverless environments (e.g. Vercel, AWS Lambda)
                 download_root = os.environ.get("WHISPER_DOWNLOAD_ROOT")
-                if not download_root and (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")):
-                    download_root = "/tmp/whisper_models"
+                if not download_root:
+                    download_root = os.path.join(tmp_base, "whisper_models")
+                try:
+                    os.makedirs(download_root, exist_ok=True)
+                except Exception:
+                    pass
 
                 _cached_whisper_model = WhisperModel(
                     model_size,

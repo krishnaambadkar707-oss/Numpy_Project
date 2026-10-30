@@ -9,10 +9,43 @@ for p in [api_dir, root_dir, os.getcwd(), "/var/task", "/var/task/api"]:
         sys.path.insert(0, p)
 
 # Set writable cache directories for serverless environment (/tmp)
-os.environ.setdefault("HF_HOME", "/tmp/cache/huggingface")
-os.environ.setdefault("TRANSFORMERS_CACHE", "/tmp/cache/transformers")
-os.environ.setdefault("TORCH_HOME", "/tmp/cache/torch")
-os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
+import tempfile
+
+is_posix = os.name != "nt"
+tmp_base = "/tmp" if is_posix else os.environ.get("TEMP", os.environ.get("TMP", "C:/tmp"))
+
+try:
+    user_home = os.path.expanduser("~")
+    if not os.path.exists(user_home) or not os.access(user_home, os.W_OK):
+        os.environ["HOME"] = tmp_base
+except Exception:
+    os.environ["HOME"] = tmp_base
+
+if is_posix and os.path.exists(tmp_base) and os.access(tmp_base, os.W_OK):
+    os.environ["HOME"] = tmp_base
+    os.environ["TMPDIR"] = tmp_base
+    os.environ["TEMP"] = tmp_base
+    os.environ["TMP"] = tmp_base
+    tempfile.tempdir = tmp_base
+
+hf_cache = os.path.join(tmp_base, "cache", "huggingface")
+try:
+    os.makedirs(hf_cache, exist_ok=True)
+    os.makedirs(os.path.join(hf_cache, "hub"), exist_ok=True)
+    os.makedirs(os.path.join(tmp_base, "whisper_models"), exist_ok=True)
+except Exception:
+    pass
+
+os.environ["HF_HOME"] = hf_cache
+os.environ["HF_HUB_CACHE"] = os.path.join(hf_cache, "hub")
+os.environ["HUGGINGFACE_HUB_CACHE"] = os.path.join(hf_cache, "hub")
+os.environ["TRANSFORMERS_CACHE"] = os.path.join(tmp_base, "cache", "transformers")
+os.environ["TORCH_HOME"] = os.path.join(tmp_base, "cache", "torch")
+os.environ["XDG_CACHE_HOME"] = os.path.join(tmp_base, "cache")
+os.environ["XDG_CONFIG_HOME"] = os.path.join(tmp_base, "config")
+os.environ["XDG_DATA_HOME"] = os.path.join(tmp_base, "data")
+os.environ["TOKENIZERS_PARALLELISM"] = "false"
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
 from fastapi import Request
 from backend.main import app

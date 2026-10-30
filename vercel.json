@@ -1,6 +1,23 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "version": 2,
+  "env": {
+    "HOME": "/tmp",
+    "TMPDIR": "/tmp",
+    "TEMP": "/tmp",
+    "TMP": "/tmp",
+    "HF_HOME": "/tmp/cache/huggingface",
+    "HF_HUB_CACHE": "/tmp/cache/huggingface/hub",
+    "HUGGINGFACE_HUB_CACHE": "/tmp/cache/huggingface/hub",
+    "TRANSFORMERS_CACHE": "/tmp/cache/transformers",
+    "TORCH_HOME": "/tmp/cache/torch",
+    "XDG_CACHE_HOME": "/tmp/cache",
+    "XDG_CONFIG_HOME": "/tmp/config",
+    "XDG_DATA_HOME": "/tmp/data",
+    "TOKENIZERS_PARALLELISM": "false",
+    "KMP_DUPLICATE_LIB_OK": "TRUE",
+    "WHISPER_MODEL": "tiny"
+  },
   "rewrites": [
     {
       "source": "/api/(.*)",

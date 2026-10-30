@@ -15,6 +15,11 @@ import shutil
 import tempfile
 import threading
 from typing import Dict, Any, Optional
+
+is_posix = os.name != "nt"
+tmp_base = "/tmp" if is_posix else os.environ.get("TEMP", os.environ.get("TMP", "C:/tmp"))
+if is_posix and os.path.exists(tmp_base) and os.access(tmp_base, os.W_OK):
+    tempfile.tempdir = tmp_base
 from fastapi import APIRouter, UploadFile, File, Form, HTTPException, BackgroundTasks, Response
 
 from backend.translator import (
