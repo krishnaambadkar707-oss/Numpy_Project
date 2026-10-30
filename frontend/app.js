@@ -130,6 +130,7 @@ async function detectBackendServer() {
     // Check local server endpoints
     const endpoints = [
         window.location.protocol.startsWith('http') ? '/api/health' : null,
+        window.location.protocol.startsWith('http') ? '/health' : null,
         'http://127.0.0.1:8000/api/health'
     ].filter(Boolean);
 
@@ -141,7 +142,7 @@ async function detectBackendServer() {
             clearTimeout(timeoutId);
 
             if (res.ok) {
-                apiBaseUrl = url.replace('/api/health', '');
+                apiBaseUrl = url.replace(/\/api\/health|\/health/, '');
                 showBanner('success', '⚡ Server Mode Connected — Python NumPy FastAPI Backend is active!');
                 return true;
             }

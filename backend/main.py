@@ -27,7 +27,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )
@@ -51,6 +51,7 @@ class ProcessRequest(BaseModel):
     threshold: float = 500.0
     window_size: int = 5
 
+@app.get("/health")
 @app.get("/api/health")
 def health_check():
     return {"status": "ok", "service": "Audio Signal Processor API"}

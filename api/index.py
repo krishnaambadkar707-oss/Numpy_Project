@@ -12,16 +12,21 @@ os.environ.setdefault("TRANSFORMERS_CACHE", "/tmp/cache/transformers")
 os.environ.setdefault("TORCH_HOME", "/tmp/cache/torch")
 os.environ.setdefault("KMP_DUPLICATE_LIB_OK", "TRUE")
 
-from fastapi.staticfiles import StaticFiles
+from fastapi import Request
 from backend.main import app
 
-# Mount static frontend so that any fallback request directly reaching the serverless
-# function also receives the complete HTML/CSS/JS dashboard
-for folder_name in ("public", "frontend"):
-    folder_path = os.path.join(root_dir, folder_name)
-    if os.path.isdir(folder_path):
-        app.mount("/", StaticFiles(directory=folder_path, html=True), name="static")
-        break
+# Normalization middleware so any request reaching the serverless function matches
+# regardless of whether Vercel passed /api/route or stripped it to /route
+@app.middleware("http")
+async def normalize_api_path(request: Request, call_next):
+    path = request.scope.get("path", "")
+    if not path.startswith("/api") and path not in ("/", ""):
+        request.scope["path"] = "/api" + path
+    return await call_next(request)
+
+@app.get("/")
+def api_root():
+    return {"status": "ok", "service": "Audio Signal Processor API", "version": "1.0.0"}
 
 # Entrypoint for Vercel Serverless
 app = app
