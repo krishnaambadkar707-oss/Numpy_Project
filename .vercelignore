@@ -1,0 +1,38 @@
+# Git & Environment
+.git/
+.venv/
+venv/
+env/
+
+# Python bytecode & cache
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Tests & Analysis
+test_*.py
+tests/
+.pytest_cache/
+.coverage
+htmlcov/
+
+# Static audio & media
+*.wav
+*.mp3
+*.m4a
+*.ogg
+*.flac
+*.webm
+input.wav
+processed.wav
+
+# Other deployment platforms & documentation
+Dockerfile
+.dockerignore
+render.yaml
+Procfile
+runcode.json
+numpy_project.py
+*.md
+

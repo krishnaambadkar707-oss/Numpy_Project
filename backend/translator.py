@@ -179,6 +179,43 @@ def _convert_wav_fallback_pure_python(input_bytes: bytes) -> str:
     return output_path
 
 
+def _convert_audio_with_pyav(input_bytes: bytes) -> str:
+    """
+    Decodes audio (MP3, M4A, OGG, FLAC, WEBM) directly in Python using PyAV,
+    resampling to 16 kHz mono 16-bit PCM WAV. Does not require external ffmpeg CLI.
+    """
+    import io
+    import wave
+    import av
+
+    _patch_pyav_metadata_errors()
+    buffer = io.BytesIO(input_bytes)
+    container = av.open(buffer)
+    if not container.streams.audio:
+        raise ValueError("Audio stream not found in container.")
+    stream = container.streams.audio[0]
+    resampler = av.AudioResampler(format="s16", layout="mono", rate=16000)
+
+    frames_bytes = []
+    for frame in container.decode(stream):
+        for r_frame in resampler.resample(frame):
+            frames_bytes.append(r_frame.to_ndarray().tobytes())
+
+    raw_pcm = b"".join(frames_bytes)
+    if not raw_pcm:
+        raise ValueError("Decoded audio stream contains no audio data.")
+
+    temp_dir = tempfile.mkdtemp(prefix="audio_trans_pyav_")
+    output_path = os.path.join(temp_dir, "converted_16k_mono.wav")
+    with wave.open(output_path, "wb") as out_wf:
+        out_wf.setnchannels(1)
+        out_wf.setsampwidth(2)
+        out_wf.setframerate(16000)
+        out_wf.writeframes(raw_pcm)
+
+    return output_path
+
+
 def convert_to_wav_16k_mono(input_bytes: bytes, filename: str) -> str:
     """
     Validates input audio and converts it to a 16 kHz mono 16-bit PCM WAV file.
@@ -207,15 +244,18 @@ def convert_to_wav_16k_mono(input_bytes: bytes, filename: str) -> str:
 
     ffmpeg_bin = get_ffmpeg_cmd()
 
-    # If FFmpeg is missing, attempt pure-Python fallback for WAV files
+    # If FFmpeg is missing, attempt pure-Python fallback for WAV files or PyAV for encoded audio
     if not ffmpeg_bin:
         if ext == ".wav":
             return _convert_wav_fallback_pure_python(input_bytes)
-        raise RuntimeError(
-            "ffmpeg is not installed or not found in system PATH. "
-            "Please install ffmpeg (e.g. run 'pip install imageio-ffmpeg' or 'winget install Gyan.FFmpeg'), "
-            "or upload a .wav audio file."
-        )
+        try:
+            return _convert_audio_with_pyav(input_bytes)
+        except Exception:
+            raise RuntimeError(
+                "ffmpeg is not installed or not found in system PATH. "
+                "Please install ffmpeg (e.g. run 'winget install Gyan.FFmpeg'), "
+                "or upload a .wav audio file."
+            )
 
     # Create temporary directory for safe execution
     temp_dir = tempfile.mkdtemp(prefix="audio_trans_")
@@ -384,11 +424,18 @@ def get_whisper_model():
                 compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
                 device = os.environ.get("WHISPER_DEVICE", "cpu")
                 cpu_threads = min(4, os.cpu_count() or 1)
+
+                # Ensure download_root is writable in serverless environments (e.g. Vercel, AWS Lambda)
+                download_root = os.environ.get("WHISPER_DOWNLOAD_ROOT")
+                if not download_root and (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")):
+                    download_root = "/tmp/whisper_models"
+
                 _cached_whisper_model = WhisperModel(
                     model_size,
                     device=device,
                     compute_type=compute_type,
-                    cpu_threads=cpu_threads
+                    cpu_threads=cpu_threads,
+                    download_root=download_root
                 )
     return _cached_whisper_model
 

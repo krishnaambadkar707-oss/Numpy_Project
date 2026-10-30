@@ -1,0 +1,22 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "version": 2,
+  "rewrites": [
+    {
+      "source": "/api/:match*",
+      "destination": "/api/index.py"
+    },
+    {
+      "source": "/:match*",
+      "destination": "/frontend/:match*"
+    }
+  ],
+  "functions": {
+    "api/index.py": {
+      "maxDuration": 60,
+      "memory": 1024,
+      "excludeFiles": "{test_*.py,*.wav,*.mp3,*.md,Dockerfile,render.yaml,Procfile,numpy_project.py,runcode.json}"
+    }
+  }
+}
+

@@ -190,6 +190,21 @@ This project is pre-configured to deploy on Render seamlessly via either **Docke
      - Add Environment Variable: `WHISPER_MODEL` = `tiny`
    - Render routes traffic to port `10000` automatically. The server automatically binds to `0.0.0.0:$PORT`.
 
+### Vercel Serverless Deployment
+This repository is configured out-of-the-box for **Vercel Serverless Deployment**:
+- `vercel.json`: Promotes `frontend/` directly to Vercel's global CDN and routes `/api/*` to the FastAPI backend at `api/index.py`.
+- `api/index.py`: Serverless entrypoint configuring writable `/tmp` paths for HuggingFace and Whisper cache.
+- `.vercelignore`: Excludes tests, media, `.git`, and deployment configs from the Lambda bundle to remain well within the 500 MB limit.
+
+**Recommended Vercel Settings:**
+1. In your Vercel Project Dashboard, navigate to **Settings > Environment Variables** and add:
+   - `WHISPER_MODEL` = `tiny` (recommended for fast serverless execution and low cold-start latency).
+   - *(Optional)* `VERCEL_SUPPORT_LARGE_FUNCTIONS` = `1` (enables extended bundle headroom up to 5 GB if using larger Whisper models).
+2. Deploy with GitHub integration or with the Vercel CLI:
+   ```bash
+   vercel --prod
+   ```
+
 ---
 
 ## ⚠️ Known Limitations
