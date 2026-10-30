@@ -5,6 +5,9 @@ WORKDIR /app
 # Copy dependency manifest
 COPY requirements.txt .
 
+# Install ffmpeg system package for audio decoding and conversion
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg && rm -rf /var/lib/apt/lists/*
+
 # Install dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 

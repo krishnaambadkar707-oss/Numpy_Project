@@ -15,6 +15,7 @@ from backend.audio_processor import (
     downsample_waveform,
     generate_demo_wav
 )
+from backend.translate_routes import router as translate_router
 
 app = FastAPI(
     title="Audio Signal Processor API",
@@ -30,6 +31,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.include_router(translate_router)
 
 # In-memory storage for active audio sessions (capped for production memory safety)
 AUDIO_STORE: Dict[str, Dict[str, Any]] = {}

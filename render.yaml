@@ -1,11 +1,15 @@
 services:
   - type: web
     name: numpy-audio-processor
-    env: python
-    buildCommand: pip install -r requirements.txt
-    startCommand: python server.py
+    runtime: docker
     envVars:
       - key: PORT
         value: 10000
       - key: ENV
         value: production
+      - key: WHISPER_MODEL
+        value: base
+      - key: WHISPER_DEVICE
+        value: cpu
+      - key: WHISPER_COMPUTE_TYPE
+        value: int8

@@ -1,4 +1,7 @@
 import os
+# Prevent OpenMP runtime crash (OMP: Error #15) on Windows / Anaconda environments
+os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
+
 import uvicorn
 from fastapi.staticfiles import StaticFiles
 from backend.main import app

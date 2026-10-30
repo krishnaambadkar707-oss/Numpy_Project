@@ -2,3 +2,8 @@ fastapi>=0.100.0
 uvicorn>=0.22.0
 numpy>=1.24.0
 python-multipart>=0.0.6
+faster-whisper>=1.0.0
+deep-translator>=1.11.4
+edge-tts>=6.1.9
+imageio-ffmpeg>=0.4.9
+
