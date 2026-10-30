@@ -136,7 +136,7 @@ async function detectBackendServer() {
     for (const url of endpoints) {
         try {
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 1500);
+            const timeoutId = setTimeout(() => controller.abort(), 6000);
             const res = await fetch(url, { signal: controller.signal });
             clearTimeout(timeoutId);
 

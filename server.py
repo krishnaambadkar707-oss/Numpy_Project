@@ -6,8 +6,10 @@ import uvicorn
 from fastapi.staticfiles import StaticFiles
 from backend.main import app
 
-# Mount static files for the frontend dashboard
-frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
+# Mount static files for the frontend dashboard (supports both public/ and frontend/)
+frontend_dir = os.path.join(os.path.dirname(__file__), "public")
+if not os.path.isdir(frontend_dir):
+    frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
 app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
 
 if __name__ == "__main__":

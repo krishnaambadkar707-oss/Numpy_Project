@@ -175,14 +175,15 @@
 
     /**
      * Loads available languages from GET /api/translate/languages.
+     * Retries automatically if backend is warming up (e.g. serverless cold start).
      */
-    async function loadLanguages() {
+    async function loadLanguages(retryCount = 0) {
         const baseUrl = getApiBaseUrl();
         const url = `${baseUrl}/api/translate/languages`;
 
         try {
             const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 3000);
+            const timeout = setTimeout(() => controller.abort(), 8000);
             const res = await fetch(url, { signal: controller.signal });
             clearTimeout(timeout);
 
@@ -203,6 +204,10 @@
 
             if (offlineBox) offlineBox.style.display = 'none';
         } catch (err) {
+            if (retryCount < 2) {
+                setTimeout(() => loadLanguages(retryCount + 1), 1500);
+                return;
+            }
             console.warn('Translator: Backend not reachable for languages:', err.message);
             if (offlineBox) {
                 offlineBox.style.display = 'flex';

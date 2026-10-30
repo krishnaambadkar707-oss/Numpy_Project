@@ -1,0 +1,386 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Signal Processor - NumPy Powered Studio</title>
+    <meta name="description"
+        content="Modern web studio for audio signal processing using NumPy. Perform noise reduction, moving average smoothing, FFT frequency analysis, and MSE metrics in real time.">
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap"
+        rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <link rel="stylesheet" href="translate.css">
+</head>
+
+<body>
+    <div class="app-background">
+        <div class="glow-orb orb-1"></div>
+        <div class="glow-orb orb-2"></div>
+    </div>
+
+    <!-- SERVER STATUS NOTIFICATION BANNER -->
+    <div id="server-status-banner" class="status-banner" style="display: none;"></div>
+
+    <div class="app-container">
+        <!-- HEADER -->
+        <header class="app-header">
+            <div class="brand">
+                <div class="logo-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M2 10v4M6 6v12M10 3v18M14 8v8M18 5v14M22 10v4" stroke-linecap="round"
+                            stroke-linejoin="round" />
+                    </svg>
+                </div>
+                <div>
+                    <h1>Audio Signal Processor</h1>
+                    <p class="subtitle">NumPy-Engineered DSP • Noise Reduction • FFT Spectrum • MSE Analytics</p>
+                </div>
+            </div>
+            <div class="header-badges">
+                <span class="badge badge-numpy">NumPy 1.24+</span>
+                <span class="badge badge-fastapi">FastAPI Engine</span>
+            </div>
+        </header>
+
+        <!-- MAIN DASHBOARD CONTENT -->
+        <main class="dashboard-grid">
+            <!-- LEFT COLUMN: CONTROLS & INPUT -->
+            <section class="panel control-panel">
+                <!-- AUDIO SOURCE SELECTION -->
+                <div class="panel-header">
+                    <h2><span class="step-num">1</span> Audio Input</h2>
+                </div>
+
+                <div class="drop-zone" id="drop-zone">
+                    <input type="file" id="audio-file-input" accept=".wav" hidden>
+                    <div class="drop-icon">
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
+                                stroke-linecap="round" stroke-linejoin="round" />
+                        </svg>
+                    </div>
+                    <p class="drop-text">Drag & drop a <strong>.WAV</strong> audio file here</p>
+                    <p class="drop-subtext">or click to browse your local device</p>
+                    <button class="btn btn-secondary" id="btn-browse">Browse Files</button>
+                </div>
+
+                <div class="divider"><span>OR</span></div>
+
+                <button class="btn btn-demo" id="btn-load-demo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polygon points="5 3 19 12 5 21 5 3" />
+                    </svg>
+                    Generate Demo Audio (Sine + Noise)
+                </button>
+
+                <!-- FILE METADATA DISPLAY -->
+                <div class="file-info-card" id="file-info-card" style="display: none;">
+                    <div class="file-name-row">
+                        <span class="file-icon">🎵</span>
+                        <span class="file-name" id="info-filename">demo.wav</span>
+                    </div>
+                    <div class="file-meta-grid">
+                        <div><span class="label">Sample Rate:</span> <strong id="info-samplerate">22,050 Hz</strong>
+                        </div>
+                        <div><span class="label">Duration:</span> <strong id="info-duration">3.00 s</strong></div>
+                        <div><span class="label">Samples:</span> <strong id="info-samples">66,150</strong></div>
+                        <div><span class="label">Channels:</span> <strong id="info-channels">Mono (1)</strong></div>
+                    </div>
+                </div>
+
+                <!-- DSP PARAMETER CONTROLS -->
+                <div class="panel-header margin-top">
+                    <h2><span class="step-num">2</span> Processing Parameters</h2>
+                </div>
+
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <label for="slider-threshold">Noise Gate Threshold</label>
+                        <span class="slider-value" id="val-threshold">500</span>
+                    </div>
+                    <input type="range" id="slider-threshold" min="0" max="2000" step="10" value="500">
+                    <p class="slider-hint">Silences signal samples with absolute amplitude lower than this threshold.
+                    </p>
+                </div>
+
+                <div class="slider-group">
+                    <div class="slider-header">
+                        <label for="slider-window">Moving Average Window</label>
+                        <span class="slider-value" id="val-window">5</span>
+                    </div>
+                    <input type="range" id="slider-window" min="1" max="31" step="2" value="5">
+                    <p class="slider-hint">Convolves array with a uniform 1D kernel to smooth sharp high-frequency
+                        transients.</p>
+                </div>
+
+                <button class="btn btn-primary" id="btn-process">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <polyline points="23 4 23 10 17 10" />
+                        <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                    </svg>
+                    Apply Process Filters
+                </button>
+            </section>
+
+            <!-- RIGHT COLUMN: ANALYTICS & VISUALIZATIONS -->
+            <section class="panel visual-panel">
+                <!-- AUDIO PLAYBACK COMPARISON -->
+                <div class="audio-playback-grid">
+                    <div class="audio-card">
+                        <h3>Original Audio</h3>
+                        <audio id="audio-player-original" controls class="custom-audio"></audio>
+                    </div>
+                    <div class="audio-card">
+                        <h3>Processed Audio</h3>
+                        <audio id="audio-player-processed" controls class="custom-audio"></audio>
+                    </div>
+                </div>
+
+                <!-- METRICS ANALYTICS CARDS -->
+                <div class="metrics-grid">
+                    <div class="metric-card">
+                        <span class="metric-title">Max Amplitude</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val" id="metric-max-amp">--</span>
+                            <span class="metric-sub" id="metric-max-amp-orig">Orig: --</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-title">Mean DC Offset</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val" id="metric-mean">--</span>
+                            <span class="metric-sub" id="metric-mean-orig">Orig: --</span>
+                        </div>
+                    </div>
+                    <div class="metric-card">
+                        <span class="metric-title">Signal Variance</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val" id="metric-variance">--</span>
+                            <span class="metric-sub" id="metric-var-orig">Orig: --</span>
+                        </div>
+                    </div>
+                    <div class="metric-card metric-highlight">
+                        <span class="metric-title">Mean Squared Error (MSE)</span>
+                        <div class="metric-value-row">
+                            <span class="metric-val text-gradient" id="metric-mse">--</span>
+                            <span class="metric-sub">Orig vs Processed</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- WAVEFORM CANVAS CHART -->
+                <div class="chart-box">
+                    <div class="chart-header">
+                        <h3>Waveform Comparison (Original vs Processed)</h3>
+                        <div class="chart-legend">
+                            <span class="legend-item"><span class="color-dot orig-dot"></span> Original Signal</span>
+                            <span class="legend-item"><span class="color-dot proc-dot"></span> Processed Signal</span>
+                        </div>
+                    </div>
+                    <div class="canvas-container">
+                        <canvas id="waveform-canvas"></canvas>
+                    </div>
+                </div>
+
+                <!-- FREQUENCY SPECTRUM CANVAS CHART -->
+                <div class="chart-box">
+                    <div class="chart-header">
+                        <h3>Frequency Spectrum (FFT Magnitude)</h3>
+                        <span class="chart-subtitle">Fast Fourier Transform Bin Distribution</span>
+                    </div>
+                    <div class="canvas-container">
+                        <canvas id="fft-canvas"></canvas>
+                    </div>
+                </div>
+            </section>
+        </main>
+
+        <!-- AUDIO TRANSLATOR SECTION -->
+        <section id="translator-section" aria-label="Audio Translator">
+            <div class="translator-card">
+                <!-- Offline Notice (visible only if backend is unreachable) -->
+                <div id="trans-offline-box" class="trans-offline-alert" style="display: none;"></div>
+
+                <div class="translator-header">
+                    <div class="translator-title-group">
+                        <div class="translator-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <circle cx="12" cy="12" r="10" />
+                                <line x1="2" y1="12" x2="22" y2="12" />
+                                <path
+                                    d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2>Audio Translator Studio</h2>
+                            <p>Upload audio in ANY language • Transcribe &amp; Translate • Neural Text-to-Speech Output
+                            </p>
+                        </div>
+                    </div>
+                    <div class="translator-badges">
+                        <span class="trans-badge trans-badge-whisper">faster-whisper AI</span>
+                        <span class="trans-badge trans-badge-edge">Edge-TTS Neural Voice</span>
+                    </div>
+                </div>
+
+                <!-- Input Grid -->
+                <div class="translator-form-grid">
+                    <!-- Dropzone -->
+                    <div class="trans-dropzone" id="trans-dropzone" tabindex="0" role="button"
+                        aria-label="Audio file upload area">
+                        <input type="file" id="trans-file-input" accept="audio/*,.wav,.mp3,.m4a,.ogg,.flac,.webm"
+                            hidden>
+                        <div class="trans-drop-icon">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M17 8l-5-5-5 5M12 3v12"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                        </div>
+                        <p class="trans-drop-text">Drag &amp; drop <strong>any audio file</strong> (WAV, MP3, M4A, OGG,
+                            WebM)</p>
+                        <p class="trans-drop-subtext">Max size: 25 MB • Max duration: 5 minutes</p>
+                        <button type="button" class="btn btn-secondary" id="trans-btn-browse"
+                            style="margin-top: 0.75rem;">Browse File</button>
+                        <div class="trans-selected-file" id="trans-selected-file" style="display: none;"></div>
+                    </div>
+
+                    <!-- Settings & Submit -->
+                    <div class="trans-settings-column">
+                        <div class="trans-field-group">
+                            <label class="trans-label" for="trans-lang-select">Target Language</label>
+                            <select id="trans-lang-select" class="trans-select" aria-label="Select Target Language">
+                                <option value="en">English (en)</option>
+                                <option value="hi">Hindi (hi)</option>
+                                <option value="mr">Marathi (mr)</option>
+                                <option value="es">Spanish (es)</option>
+                                <option value="fr">French (fr)</option>
+                                <option value="de">German (de)</option>
+                                <option value="it">Italian (it)</option>
+                                <option value="pt">Portuguese (pt)</option>
+                                <option value="ru">Russian (ru)</option>
+                                <option value="ja">Japanese (ja)</option>
+                                <option value="ko">Korean (ko)</option>
+                                <option value="zh">Chinese (zh)</option>
+                                <option value="ar">Arabic (ar)</option>
+                                <option value="ta">Tamil (ta)</option>
+                                <option value="te">Telugu (te)</option>
+                                <option value="bn">Bengali (bn)</option>
+                                <option value="gu">Gujarati (gu)</option>
+                                <option value="kn">Kannada (kn)</option>
+                                <option value="ml">Malayalam (ml)</option>
+                                <option value="pa">Punjabi (pa)</option>
+                                <option value="ur">Urdu (ur)</option>
+                            </select>
+                        </div>
+
+                        <div class="trans-info-box">
+                            <strong>Automatic Language Detection:</strong> The source language is automatically detected
+                            with high confidence by faster-whisper. If the target language matches the source,
+                            translation is skipped automatically.
+                        </div>
+
+                        <div class="trans-actions-row">
+                            <button type="button" class="btn-translate" id="trans-btn-submit" disabled>
+                                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                    style="width: 18px; height: 18px;">
+                                    <polygon points="5 3 19 12 5 21 5 3" />
+                                </svg>
+                                Translate Audio
+                            </button>
+                            <button type="button" class="btn-trans-reset" id="trans-btn-reset">Reset</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Error Alert Box -->
+                <div id="trans-error-box" class="trans-error-alert" style="display: none;" role="alert"></div>
+
+                <!-- Progress Container -->
+                <div id="trans-progress-box" class="trans-progress-container" style="display: none;" aria-live="polite">
+                    <div class="trans-progress-header">
+                        <span class="trans-progress-status" id="trans-status-text">
+                            <span class="trans-spinner"></span> Converting Audio...
+                        </span>
+                        <span class="trans-progress-percent" id="trans-percent-text">0%</span>
+                    </div>
+                    <div class="trans-progress-bar-bg">
+                        <div class="trans-progress-bar-fill" id="trans-progress-bar"></div>
+                    </div>
+                    <div class="trans-steps-list" id="trans-steps-list">
+                        <div class="trans-step-item" data-step="converting">
+                            <div class="trans-step-circle">1</div>
+                            <span class="trans-step-name">Convert</span>
+                        </div>
+                        <div class="trans-step-item" data-step="transcribing">
+                            <div class="trans-step-circle">2</div>
+                            <span class="trans-step-name">Transcribe</span>
+                        </div>
+                        <div class="trans-step-item" data-step="translating">
+                            <div class="trans-step-circle">3</div>
+                            <span class="trans-step-name">Translate</span>
+                        </div>
+                        <div class="trans-step-item" data-step="synthesizing">
+                            <div class="trans-step-circle">4</div>
+                            <span class="trans-step-name">Synthesize</span>
+                        </div>
+                        <div class="trans-step-item" data-step="done">
+                            <div class="trans-step-circle">5</div>
+                            <span class="trans-step-name">Done</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Results Container -->
+                <div id="trans-result-container" class="trans-result-container" style="display: none;">
+                    <div class="trans-meta-badges">
+                        <span class="trans-pill trans-pill-src" id="trans-src-lang-badge">Source: --</span>
+                        <span class="trans-pill trans-pill-tgt" id="trans-tgt-lang-badge">Target: --</span>
+                    </div>
+
+                    <div class="trans-text-grid">
+                        <div class="trans-box">
+                            <div class="trans-box-header">
+                                <span class="trans-box-title">Original Transcript</span>
+                                <button type="button" class="btn-copy" id="trans-btn-copy-orig">Copy</button>
+                            </div>
+                            <div class="trans-box-content" id="trans-transcript-text"></div>
+                        </div>
+
+                        <div class="trans-box">
+                            <div class="trans-box-header">
+                                <span class="trans-box-title">Translated Text</span>
+                                <button type="button" class="btn-copy" id="trans-btn-copy-trans">Copy</button>
+                            </div>
+                            <div class="trans-box-content" id="trans-translated-text"></div>
+                        </div>
+                    </div>
+
+                    <!-- Audio Playback & Download -->
+                    <div class="trans-audio-card">
+                        <div class="trans-audio-player-wrapper">
+                            <audio id="trans-audio-player" controls class="custom-audio"></audio>
+                        </div>
+                        <a id="trans-btn-download" class="btn-download-audio" href="#" download="translated_audio.mp3">
+                            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"
+                                style="width: 18px; height: 18px;">
+                                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4M7 10l5 5 5-5M12 15V3"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                            </svg>
+                            Download Audio
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </div>
+
+    <script src="app.js"></script>
+    <script src="translate.js"></script>
+</body>
+
+</html>
