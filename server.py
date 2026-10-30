@@ -11,12 +11,15 @@ frontend_dir = os.path.join(os.path.dirname(__file__), "frontend")
 app.mount("/", StaticFiles(directory=frontend_dir, html=True), name="static")
 
 if __name__ == "__main__":
-    host = os.environ.get("HOST", "0.0.0.0")
+    host = os.environ.get("HOST", "127.0.0.1")
     port = int(os.environ.get("PORT", 8000))
+    # On Windows, uvicorn multiprocessing reloader crashes with WinError 2 WaitNamedPipe
+    # in OneDrive / spawned child processes, so reload is only enabled if explicitly requested.
     is_dev = os.environ.get("ENV", "development").lower() == "development"
+    should_reload = os.environ.get("RELOAD", "false").lower() == "true" if os.name == "nt" else is_dev
 
     print("=========================================================")
     print("Audio Signal Processor Studio Starting...")
     print(f"Running on http://{host}:{port}")
     print("=========================================================")
-    uvicorn.run("server:app", host=host, port=port, reload=is_dev)
+    uvicorn.run("server:app", host=host, port=port, reload=should_reload)
