@@ -3,12 +3,8 @@
   "version": 2,
   "rewrites": [
     {
-      "source": "/api/:match*",
+      "source": "/(.*)",
       "destination": "/api/index.py"
-    },
-    {
-      "source": "/:match*",
-      "destination": "/frontend/:match*"
     }
   ],
   "functions": {
@@ -19,4 +15,3 @@
     }
   }
 }
-
