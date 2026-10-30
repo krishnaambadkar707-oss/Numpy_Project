@@ -29,7 +29,7 @@ from backend.translator import (
     ALLOWED_EXTENSIONS
 )
 
-router = APIRouter(prefix="/api/translate", tags=["Audio Translator"])
+router = APIRouter(tags=["Audio Translator"])
 
 # ---------------------------------------------------------------------------
 # In-Memory Job Storage & TTL Cleanup

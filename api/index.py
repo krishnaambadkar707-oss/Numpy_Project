@@ -1,10 +1,12 @@
 import os
 import sys
 
-# Ensure project root is in sys.path
-root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-if root_dir not in sys.path:
-    sys.path.insert(0, root_dir)
+# Ensure both api/, project root, and task directory are in sys.path
+api_dir = os.path.dirname(os.path.abspath(__file__))
+root_dir = os.path.dirname(api_dir)
+for p in [api_dir, root_dir, os.getcwd(), "/var/task", "/var/task/api"]:
+    if os.path.exists(p) and p not in sys.path:
+        sys.path.insert(0, p)
 
 # Set writable cache directories for serverless environment (/tmp)
 os.environ.setdefault("HF_HOME", "/tmp/cache/huggingface")
@@ -16,44 +18,36 @@ from fastapi import Request
 from backend.main import app
 
 # Normalization middleware so any request reaching the serverless function matches
-# the exact FastAPI route, regardless of whether Vercel passed the path via
-# x-matched-path header, query rewrite parameter (?path=...), or direct path.
+# the exact FastAPI route, even if Vercel forwarded the path via proxy headers
 @app.middleware("http")
 async def resolve_real_path_middleware(request: Request, call_next):
-    # 1. Check Vercel proxy headers
-    matched_path = (
-        request.headers.get("x-matched-path")
-        or request.headers.get("x-vercel-matched-path")
-        or request.headers.get("x-forwarded-uri")
-    )
-    if matched_path and "?" in matched_path:
-        matched_path = matched_path.split("?", 1)[0]
+    current_path = request.scope.get("path", "")
 
-    # 2. Check query parameter from vercel.json rewrite
-    query_path = request.query_params.get("path")
-    if query_path:
-        if not query_path.startswith("/"):
-            query_path = "/" + query_path
-        if not query_path.startswith("/api/"):
-            query_path = "/api" + query_path
+    # Only intervene if the current path is just root or the serverless function script name
+    if current_path in ("/", "", "/api", "/api/", "/api/index.py", "index.py"):
+        fwd_uri = (
+            request.headers.get("x-forwarded-uri")
+            or request.headers.get("x-original-uri")
+            or request.headers.get("x-rewrite-url")
+        )
+        if fwd_uri and "?" in fwd_uri:
+            fwd_uri = fwd_uri.split("?", 1)[0]
 
-    # Determine candidate path
-    candidate = matched_path or query_path or request.scope.get("path", "")
+        matched = request.headers.get("x-matched-path") or request.headers.get("x-vercel-matched-path")
+        if matched and "?" in matched:
+            matched = matched.split("?", 1)[0]
+        if matched in ("/", "/api", "/api/", "/api/index.py", "index.py"):
+            matched = None
 
-    # Strip serverless file artifacts like index.py
-    if candidate.endswith("/index.py"):
-        candidate = candidate[:-9] or "/"
-    elif candidate == "index.py":
-        candidate = "/"
-
-    if candidate and candidate not in ("/", ""):
-        if not candidate.startswith("/api"):
-            candidate = "/api" + candidate
-        request.scope["path"] = candidate
+        candidate = fwd_uri or matched
+        if candidate and candidate not in ("/", "/api", "/api/", "/api/index.py", "index.py"):
+            if candidate.endswith("/index.py"):
+                candidate = candidate[:-9] or "/"
+            request.scope["path"] = candidate
 
     return await call_next(request)
 
-# Catch-all root endpoints supporting all HTTP methods to prevent 405 Method Not Allowed
+# Catch-all root endpoints supporting all HTTP methods for health/root checks
 @app.api_route("/", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"])
 @app.api_route("/api", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"])
 @app.api_route("/api/index.py", methods=["GET", "POST", "PUT", "DELETE", "OPTIONS", "HEAD"])

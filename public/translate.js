@@ -53,6 +53,43 @@
         return 'http://127.0.0.1:8000';
     }
 
+    const DEFAULT_LANGUAGES = [
+        { code: 'en', name: 'English' },
+        { code: 'hi', name: 'Hindi' },
+        { code: 'mr', name: 'Marathi' },
+        { code: 'ta', name: 'Tamil' },
+        { code: 'te', name: 'Telugu' },
+        { code: 'bn', name: 'Bengali' },
+        { code: 'gu', name: 'Gujarati' },
+        { code: 'kn', name: 'Kannada' },
+        { code: 'ml', name: 'Malayalam' },
+        { code: 'pa', name: 'Punjabi' },
+        { code: 'ur', name: 'Urdu' },
+        { code: 'es', name: 'Spanish' },
+        { code: 'fr', name: 'French' },
+        { code: 'de', name: 'German' },
+        { code: 'it', name: 'Italian' },
+        { code: 'pt', name: 'Portuguese' },
+        { code: 'ru', name: 'Russian' },
+        { code: 'ja', name: 'Japanese' },
+        { code: 'ko', name: 'Korean' },
+        { code: 'zh', name: 'Chinese' },
+        { code: 'ar', name: 'Arabic' }
+    ];
+
+    function populateLanguages(langs) {
+        if (!langSelect) return;
+        const currentVal = langSelect.value || 'en';
+        langSelect.innerHTML = '';
+        langs.forEach(lang => {
+            const opt = document.createElement('option');
+            opt.value = lang.code;
+            opt.textContent = `${lang.name} (${lang.code})`;
+            if (lang.code === currentVal) opt.selected = true;
+            langSelect.appendChild(opt);
+        });
+    }
+
     /**
      * Initializes DOM references and event listeners once DOM is ready.
      */
@@ -89,6 +126,7 @@
         tgtLangBadge = document.getElementById('trans-tgt-lang-badge');
 
         attachEventListeners();
+        populateLanguages(DEFAULT_LANGUAGES);
         loadLanguages();
     }
 
@@ -174,41 +212,46 @@
     }
 
     /**
-     * Loads available languages from GET /api/translate/languages.
+     * Loads available languages from GET /api/translate/languages (or /translate/languages).
      * Retries automatically if backend is warming up (e.g. serverless cold start).
      */
     async function loadLanguages(retryCount = 0) {
         const baseUrl = getApiBaseUrl();
-        const url = `${baseUrl}/api/translate/languages`;
+        const urls = [
+            `${baseUrl}/api/translate/languages`,
+            `${baseUrl}/translate/languages`
+        ];
 
-        try {
-            const controller = new AbortController();
-            const timeout = setTimeout(() => controller.abort(), 8000);
-            const res = await fetch(url, { signal: controller.signal });
-            clearTimeout(timeout);
+        let loaded = false;
+        for (const url of urls) {
+            try {
+                const controller = new AbortController();
+                const timeout = setTimeout(() => controller.abort(), 6000);
+                const res = await fetch(url, { signal: controller.signal });
+                clearTimeout(timeout);
 
-            if (!res.ok) throw new Error('Failed to fetch languages.');
+                if (res.ok) {
+                    const data = await res.json();
+                    if (data && Array.isArray(data.languages) && data.languages.length > 0) {
+                        supportedLanguages = data.languages;
+                        populateLanguages(supportedLanguages);
+                        if (offlineBox) offlineBox.style.display = 'none';
+                        if (selectedFile) btnTranslate.disabled = false;
+                        loaded = true;
+                        break;
+                    }
+                }
+            } catch (err) {
+                // Try next endpoint fallback
+            }
+        }
 
-            const data = await res.json();
-            supportedLanguages = data.languages || [];
-
-            // Populate select options
-            langSelect.innerHTML = '';
-            supportedLanguages.forEach(lang => {
-                const opt = document.createElement('option');
-                opt.value = lang.code;
-                opt.textContent = `${lang.name} (${lang.code})`;
-                if (lang.code === 'en') opt.selected = true;
-                langSelect.appendChild(opt);
-            });
-
-            if (offlineBox) offlineBox.style.display = 'none';
-        } catch (err) {
-            if (retryCount < 2) {
+        if (!loaded) {
+            if (retryCount < 3) {
                 setTimeout(() => loadLanguages(retryCount + 1), 1500);
                 return;
             }
-            console.warn('Translator: Backend not reachable for languages:', err.message);
+            console.warn('Translator: Backend not reachable for languages after retries.');
             if (offlineBox) {
                 offlineBox.style.display = 'flex';
                 offlineBox.innerHTML = `
@@ -247,28 +290,42 @@
         updateProgressUI('queued', 5);
 
         const baseUrl = getApiBaseUrl();
-        const url = `${baseUrl}/api/translate/start`;
+        const urls = [
+            `${baseUrl}/api/translate/start`,
+            `${baseUrl}/translate/start`
+        ];
 
-        const formData = new FormData();
-        formData.append('file', selectedFile, selectedFile.name);
-        formData.append('target_lang', targetLang);
+        let success = false;
+        let lastError = null;
 
-        try {
-            const response = await fetch(url, {
-                method: 'POST',
-                body: formData
-            });
+        for (const url of urls) {
+            const formData = new FormData();
+            formData.append('file', selectedFile, selectedFile.name);
+            formData.append('target_lang', targetLang);
 
-            if (!response.ok) {
-                const errData = await response.json().catch(() => ({}));
-                throw new Error(errData.detail || `Server returned error status ${response.status}`);
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    const data = await response.json();
+                    activeJobId = data.job_id;
+                    startPolling(activeJobId, url.includes('/api/'));
+                    success = true;
+                    break;
+                } else if (response.status !== 404 && response.status !== 405) {
+                    const errData = await response.json().catch(() => ({}));
+                    throw new Error(errData.detail || `Server returned error status ${response.status}`);
+                }
+            } catch (err) {
+                lastError = err;
             }
+        }
 
-            const data = await response.json();
-            activeJobId = data.job_id;
-            startPolling(activeJobId);
-        } catch (err) {
-            showError(`Failed to initiate translation: ${err.message}`);
+        if (!success) {
+            showError(`Failed to initiate translation: ${lastError ? lastError.message : 'Backend unreachable'}`);
             setProcessingState(false);
             progressBox.style.display = 'none';
         }
@@ -277,15 +334,21 @@
     /**
      * Polls GET /api/translate/status/{job_id} with low latency (600ms).
      */
-    function startPolling(jobId) {
+    function startPolling(jobId, useApiPrefix = true) {
         if (pollInterval) clearInterval(pollInterval);
 
         const checkStatus = async () => {
             const baseUrl = getApiBaseUrl();
-            const url = `${baseUrl}/api/translate/status/${jobId}`;
+            const prefix = useApiPrefix ? '/api/translate' : '/translate';
+            const url = `${baseUrl}${prefix}/status/${jobId}`;
 
             try {
-                const res = await fetch(url);
+                let res = await fetch(url);
+                if (!res.ok && res.status === 404 && useApiPrefix) {
+                    // Fallback to non-prefixed status endpoint
+                    res = await fetch(`${baseUrl}/translate/status/${jobId}`);
+                }
+
                 if (!res.ok) {
                     throw new Error(`Failed to query job status (${res.status})`);
                 }
@@ -298,7 +361,7 @@
                         clearInterval(pollInterval);
                         pollInterval = null;
                     }
-                    onJobComplete(job);
+                    onJobComplete(job, useApiPrefix);
                 } else if (job.status === 'error') {
                     if (pollInterval) {
                         clearInterval(pollInterval);
@@ -347,7 +410,7 @@
     /**
      * Renders job results when status === 'done'.
      */
-    function onJobComplete(job) {
+    function onJobComplete(job, useApiPrefix = true) {
         setProcessingState(false);
 
         // Language badges
@@ -366,7 +429,8 @@
 
         // Audio playback
         const baseUrl = getApiBaseUrl();
-        const audioUrl = `${baseUrl}/api/translate/result/${job.job_id}?t=${Date.now()}`;
+        const prefix = useApiPrefix ? '/api/translate' : '/translate';
+        const audioUrl = `${baseUrl}${prefix}/result/${job.job_id}?t=${Date.now()}`;
         audioPlayer.src = audioUrl;
         audioPlayer.load();
 

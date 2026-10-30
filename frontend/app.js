@@ -143,6 +143,7 @@ async function detectBackendServer() {
 
             if (res.ok) {
                 apiBaseUrl = url.replace(/\/api\/health|\/health/, '');
+                window.apiBaseUrl = apiBaseUrl;
                 showBanner('success', '⚡ Server Mode Connected — Python NumPy FastAPI Backend is active!');
                 return true;
             }
@@ -153,6 +154,7 @@ async function detectBackendServer() {
 
     // Backend server not running -> Fallback to Client Mode
     apiBaseUrl = null;
+    window.apiBaseUrl = null;
     showBanner('info', 'ℹ️ Viewing in Local Browser Mode. To connect the Python NumPy backend, run <code>python server.py</code> in terminal and open <code>http://127.0.0.1:8000</code>.');
     return false;
 }

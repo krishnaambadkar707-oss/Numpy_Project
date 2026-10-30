@@ -20,7 +20,8 @@ from backend.translate_routes import router as translate_router
 app = FastAPI(
     title="Audio Signal Processor API",
     description="NumPy-powered Audio Processing API providing noise reduction, moving average smoothing, FFT frequency analysis, and MSE metrics.",
-    version="1.0.0"
+    version="1.0.0",
+    redirect_slashes=False
 )
 
 # CORS middleware
@@ -32,7 +33,9 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.include_router(translate_router)
+# Mount translation router under both /api/translate and /translate (in case proxy strips /api)
+app.include_router(translate_router, prefix="/api/translate")
+app.include_router(translate_router, prefix="/translate")
 
 # In-memory storage for active audio sessions (capped for production memory safety)
 AUDIO_STORE: Dict[str, Dict[str, Any]] = {}
@@ -56,6 +59,7 @@ class ProcessRequest(BaseModel):
 def health_check():
     return {"status": "ok", "service": "Audio Signal Processor API"}
 
+@app.post("/upload")
 @app.post("/api/upload")
 async def upload_audio(request: Request, filename: Optional[str] = "uploaded.wav"):
     contents = await request.body()
@@ -114,6 +118,7 @@ async def upload_audio(request: Request, filename: Optional[str] = "uploaded.wav
         "magnitudes": magnitudes
     }
 
+@app.get("/demo")
 @app.get("/api/demo")
 def get_demo_audio():
     signal, sample_rate = generate_demo_wav(duration_sec=3.0, sample_rate=22050)
@@ -157,6 +162,7 @@ def get_demo_audio():
         "magnitudes": magnitudes
     }
 
+@app.post("/process")
 @app.post("/api/process")
 def process_audio(req: ProcessRequest):
     if req.audio_id not in AUDIO_STORE:
@@ -191,6 +197,7 @@ def process_audio(req: ProcessRequest):
         "magnitudes": magnitudes
     }
 
+@app.get("/audio/{audio_id}/{audio_type}")
 @app.get("/api/audio/{audio_id}/{audio_type}")
 def get_audio_file(audio_id: str, audio_type: str):
     if audio_id not in AUDIO_STORE:
