@@ -1,4 +1,5 @@
 import os
+import time
 import uuid
 import numpy as np
 from typing import Dict, Any, Optional
@@ -89,7 +90,7 @@ def load_session_from_disk(audio_id: str) -> Optional[Dict[str, Any]]:
     return None
 
 def clean_old_sessions():
-    """Keeps in-memory storage bounded to prevent memory leaks in production."""
+    """Keeps in-memory and disk storage bounded to prevent disk exhaustion (os error 28)."""
     if len(AUDIO_STORE) >= MAX_SESSIONS:
         oldest_keys = list(AUDIO_STORE.keys())[:10]
         for key in oldest_keys:
@@ -100,6 +101,36 @@ def clean_old_sessions():
                     os.remove(session_file)
                 except OSError:
                     pass
+
+    # Disk cleanup: prune session files older than 15 minutes or beyond 15 files
+    try:
+        if os.path.isdir(SESSIONS_DIR):
+            now = time.time()
+            session_files = [
+                os.path.join(SESSIONS_DIR, f)
+                for f in os.listdir(SESSIONS_DIR)
+                if f.endswith(".npz")
+            ]
+            for f in session_files:
+                try:
+                    if now - os.path.getmtime(f) > 900:
+                        os.remove(f)
+                except OSError:
+                    pass
+            remaining = [
+                os.path.join(SESSIONS_DIR, f)
+                for f in os.listdir(SESSIONS_DIR)
+                if f.endswith(".npz")
+            ]
+            if len(remaining) > 15:
+                remaining.sort(key=os.path.getmtime)
+                for old_f in remaining[:-15]:
+                    try:
+                        os.remove(old_f)
+                    except OSError:
+                        pass
+    except Exception:
+        pass
 
 class ProcessRequest(BaseModel):
     audio_id: str

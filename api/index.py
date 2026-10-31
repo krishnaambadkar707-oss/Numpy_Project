@@ -47,6 +47,14 @@ os.environ["XDG_DATA_HOME"] = os.path.join(tmp_base, "data")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+# Disable Hugging Face Xet CAS reconstruction & hf-transfer to prevent disk exhaustion (os error 28)
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_DISK_SPACE_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_EXPERIMENTAL_WARNING"] = "1"
+os.environ["XET_CACHE_DIR"] = os.path.join(tmp_base, "cache", "xet")
+
 from fastapi import Request
 from backend.main import app
 

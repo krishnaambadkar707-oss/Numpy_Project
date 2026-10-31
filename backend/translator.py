@@ -51,6 +51,14 @@ os.environ["XDG_DATA_HOME"] = os.path.join(tmp_base, "data")
 os.environ["TOKENIZERS_PARALLELISM"] = "false"
 os.environ["KMP_DUPLICATE_LIB_OK"] = "TRUE"
 
+# Disable Hugging Face Xet CAS reconstruction & hf-transfer to prevent disk exhaustion (os error 28)
+os.environ["HF_HUB_DISABLE_XET"] = "1"
+os.environ["HF_HUB_ENABLE_HF_TRANSFER"] = "0"
+os.environ["HF_HUB_DISABLE_SYMLINKS_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_DISK_SPACE_WARNING"] = "1"
+os.environ["HF_HUB_DISABLE_EXPERIMENTAL_WARNING"] = "1"
+os.environ["XET_CACHE_DIR"] = os.path.join(tmp_base, "cache", "xet")
+
 import re
 import time
 import shutil
@@ -469,8 +477,20 @@ def get_whisper_model():
                 except Exception:
                     pass
 
+                # Direct single-copy download to model_dir to avoid duplicate blobs & CAS reconstruction
+                model_dir = os.path.join(download_root, f"faster-whisper-{model_size}")
+                model_bin = os.path.join(model_dir, "model.bin")
+                if not (os.path.isdir(model_dir) and os.path.isfile(model_bin)):
+                    try:
+                        from faster_whisper import download_model
+                        download_model(model_size, output_dir=model_dir)
+                    except Exception:
+                        pass
+
+                target_model = model_dir if (os.path.isdir(model_dir) and os.path.isfile(model_bin)) else model_size
+
                 _cached_whisper_model = WhisperModel(
-                    model_size,
+                    target_model,
                     device=device,
                     compute_type=compute_type,
                     cpu_threads=cpu_threads,

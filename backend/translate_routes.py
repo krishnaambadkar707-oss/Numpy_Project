@@ -73,6 +73,22 @@ def cleanup_old_jobs():
                 if job and job.get("temp_dir") and os.path.isdir(job["temp_dir"]):
                     shutil.rmtree(job["temp_dir"], ignore_errors=True)
 
+    # Disk cleanup: prune orphaned temporary folders older than 15 minutes to prevent os error 28
+    try:
+        candidate_roots = [tempfile.gettempdir(), "/tmp", tmp_base]
+        for cdir in candidate_roots:
+            if os.path.isdir(cdir):
+                for entry in os.listdir(cdir):
+                    if entry.startswith("trans_job_") or entry.startswith("audio_trans_"):
+                        full_p = os.path.join(cdir, entry)
+                        try:
+                            if os.path.isdir(full_p) and (now - os.path.getmtime(full_p) > 900):
+                                shutil.rmtree(full_p, ignore_errors=True)
+                        except OSError:
+                            pass
+    except Exception:
+        pass
+
 
 def _persist_job_meta(job: Dict[str, Any]):
     """Persists job metadata to disk so separate serverless containers can read it."""
