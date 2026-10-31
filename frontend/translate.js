@@ -312,6 +312,12 @@
                 if (response.ok) {
                     const data = await response.json();
                     activeJobId = data.job_id;
+                    if (data.status === 'done') {
+                        updateProgressUI('done', 100);
+                        onJobComplete(data, url.includes('/api/'));
+                        success = true;
+                        break;
+                    }
                     startPolling(activeJobId, url.includes('/api/'));
                     success = true;
                     break;

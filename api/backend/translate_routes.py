@@ -9,6 +9,7 @@ Endpoints:
 """
 
 import os
+import json
 import time
 import uuid
 import shutil
@@ -73,6 +74,34 @@ def cleanup_old_jobs():
                     shutil.rmtree(job["temp_dir"], ignore_errors=True)
 
 
+def _persist_job_meta(job: Dict[str, Any]):
+    """Persists job metadata to disk so separate serverless containers can read it."""
+    temp_dir = job.get("temp_dir")
+    if temp_dir and os.path.isdir(temp_dir):
+        meta = {
+            "job_id": job.get("job_id"),
+            "status": job.get("status"),
+            "progress": job.get("progress"),
+            "target_language": job.get("target_language"),
+            "original_filename": job.get("original_filename"),
+            "detected_language": job.get("detected_language"),
+            "detected_language_confidence": job.get("detected_language_confidence"),
+            "transcript": job.get("transcript"),
+            "translated_text": job.get("translated_text"),
+            "result_audio_path": job.get("result_audio_path"),
+            "result_media_type": job.get("result_media_type", "audio/mpeg"),
+            "error": job.get("error"),
+            "created_at": job.get("created_at"),
+            "temp_dir": temp_dir
+        }
+        meta_file = os.path.join(temp_dir, "job_meta.json")
+        try:
+            with open(meta_file, "w", encoding="utf-8") as f:
+                json.dump(meta, f)
+        except Exception:
+            pass
+
+
 # ---------------------------------------------------------------------------
 # Background Pipeline Execution
 # ---------------------------------------------------------------------------
@@ -98,6 +127,7 @@ def run_translation_pipeline(job_id: str, input_bytes: bytes, original_filename:
         with _jobs_lock:
             job["status"] = "converting"
             job["progress"] = 15
+        _persist_job_meta(job)
 
         temp_wav_path = convert_to_wav_16k_mono(input_bytes, original_filename)
 
@@ -112,6 +142,7 @@ def run_translation_pipeline(job_id: str, input_bytes: bytes, original_filename:
         with _jobs_lock:
             job["status"] = "transcribing"
             job["progress"] = 40
+        _persist_job_meta(job)
 
         transcript, detected_lang, confidence = transcribe(temp_wav_path)
 
@@ -119,11 +150,13 @@ def run_translation_pipeline(job_id: str, input_bytes: bytes, original_filename:
             job["detected_language"] = detected_lang
             job["detected_language_confidence"] = round(confidence, 3)
             job["transcript"] = transcript
+        _persist_job_meta(job)
 
         # Step 3: Translating
         with _jobs_lock:
             job["status"] = "translating"
             job["progress"] = 65
+        _persist_job_meta(job)
 
         translated_text = translate_text(
             text=transcript,
@@ -133,11 +166,13 @@ def run_translation_pipeline(job_id: str, input_bytes: bytes, original_filename:
 
         with _jobs_lock:
             job["translated_text"] = translated_text
+        _persist_job_meta(job)
 
         # Step 4: Synthesizing
         with _jobs_lock:
             job["status"] = "synthesizing"
             job["progress"] = 85
+        _persist_job_meta(job)
 
         mp3_audio = synthesize(
             text=translated_text,
@@ -157,6 +192,7 @@ def run_translation_pipeline(job_id: str, input_bytes: bytes, original_filename:
             job["result_audio_bytes"] = mp3_audio
             job["result_audio_path"] = result_path
             job["result_media_type"] = "audio/mpeg"
+        _persist_job_meta(job)
 
     except Exception as exc:
         error_msg = str(exc)
@@ -164,6 +200,7 @@ def run_translation_pipeline(job_id: str, input_bytes: bytes, original_filename:
             job["status"] = "error"
             job["error"] = error_msg
             job["progress"] = 0
+        _persist_job_meta(job)
     finally:
         # Clean up intermediate WAV file
         if temp_wav_path and os.path.exists(temp_wav_path):
@@ -248,17 +285,36 @@ async def start_translation(
             "created_at": time.time(),
             "temp_dir": temp_dir
         }
+    _persist_job_meta(TRANSLATE_JOBS[job_id])
 
-    # 5. Enqueue background task
-    background_tasks.add_task(
-        run_translation_pipeline,
-        job_id,
-        contents,
-        original_filename,
-        code
-    )
-
-    return {"job_id": job_id, "status": "queued"}
+    # 5. Enqueue background task or execute synchronously in serverless runtimes
+    is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+    if is_serverless:
+        # In serverless environments, background tasks freeze after response.
+        # Run directly so completion finishes before HTTP response is sent.
+        run_translation_pipeline(job_id, contents, original_filename, code)
+        with _jobs_lock:
+            completed_job = TRANSLATE_JOBS.get(job_id, {})
+        return {
+            "job_id": job_id,
+            "status": completed_job.get("status", "done"),
+            "progress": completed_job.get("progress", 100),
+            "target_language": code,
+            "detected_language": completed_job.get("detected_language"),
+            "detected_language_confidence": completed_job.get("detected_language_confidence"),
+            "transcript": completed_job.get("transcript"),
+            "translated_text": completed_job.get("translated_text"),
+            "error": completed_job.get("error")
+        }
+    else:
+        background_tasks.add_task(
+            run_translation_pipeline,
+            job_id,
+            contents,
+            original_filename,
+            code
+        )
+        return {"job_id": job_id, "status": "queued"}
 
 
 @router.get("/status/{job_id}")
@@ -268,6 +324,25 @@ def get_job_status(job_id: str):
     """
     with _jobs_lock:
         job = TRANSLATE_JOBS.get(job_id)
+
+    if not job:
+        candidate_roots = [tempfile.gettempdir(), "/tmp", tmp_base]
+        for cdir in candidate_roots:
+            if os.path.isdir(cdir):
+                for entry in os.listdir(cdir):
+                    if job_id[:8] in entry and os.path.isdir(os.path.join(cdir, entry)):
+                        meta_file = os.path.join(cdir, entry, "job_meta.json")
+                        if os.path.exists(meta_file):
+                            try:
+                                with open(meta_file, "r", encoding="utf-8") as f:
+                                    job = json.load(f)
+                                with _jobs_lock:
+                                    TRANSLATE_JOBS[job_id] = job
+                                break
+                            except Exception:
+                                pass
+                if job:
+                    break
 
     if not job:
         raise HTTPException(status_code=404, detail="Translation job not found or expired.")
@@ -294,6 +369,25 @@ def get_job_result(job_id: str):
         job = TRANSLATE_JOBS.get(job_id)
 
     if not job:
+        candidate_roots = [tempfile.gettempdir(), "/tmp", tmp_base]
+        for cdir in candidate_roots:
+            if os.path.isdir(cdir):
+                for entry in os.listdir(cdir):
+                    if job_id[:8] in entry and os.path.isdir(os.path.join(cdir, entry)):
+                        meta_file = os.path.join(cdir, entry, "job_meta.json")
+                        if os.path.exists(meta_file):
+                            try:
+                                with open(meta_file, "r", encoding="utf-8") as f:
+                                    job = json.load(f)
+                                with _jobs_lock:
+                                    TRANSLATE_JOBS[job_id] = job
+                                break
+                            except Exception:
+                                pass
+                if job:
+                    break
+
+    if not job:
         raise HTTPException(status_code=404, detail="Translation job not found or expired.")
 
     if job["status"] == "error":
@@ -309,6 +403,12 @@ def get_job_result(job_id: str):
     if audio_bytes is None and audio_path and os.path.exists(audio_path):
         with open(audio_path, "rb") as f:
             audio_bytes = f.read()
+
+    if audio_bytes is None and job.get("temp_dir"):
+        fallback_path = os.path.join(job["temp_dir"], f"translated_{job_id}.mp3")
+        if os.path.exists(fallback_path):
+            with open(fallback_path, "rb") as f:
+                audio_bytes = f.read()
 
     if not audio_bytes:
         raise HTTPException(status_code=500, detail="Synthesized audio result is unavailable.")
