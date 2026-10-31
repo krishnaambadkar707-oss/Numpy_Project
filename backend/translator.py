@@ -59,6 +59,13 @@ os.environ["HF_HUB_DISABLE_DISK_SPACE_WARNING"] = "1"
 os.environ["HF_HUB_DISABLE_EXPERIMENTAL_WARNING"] = "1"
 os.environ["XET_CACHE_DIR"] = os.path.join(tmp_base, "cache", "xet")
 
+try:
+    import huggingface_hub.constants as _hf_constants
+    _hf_constants.HF_HUB_DISABLE_XET = True
+    _hf_constants.HF_HUB_ENABLE_HF_TRANSFER = False
+except Exception:
+    pass
+
 import re
 import time
 import shutil
@@ -67,6 +74,87 @@ import threading
 import subprocess
 from typing import Dict, Any, List, Optional, Tuple, Protocol
 from abc import ABC, abstractmethod
+
+SESSIONS_DIR = os.path.join(tmp_base, "audio_sessions")
+
+
+def ensure_tmp_disk_space(required_mb: int = 150):
+    """
+    Checks free disk space in tmp_base. If free space is below required_mb,
+    aggressively removes old cache directories, .downloading files, old session
+    files, and orphaned trans_job directories to ensure sufficient headroom.
+    """
+    try:
+        total, used, free = shutil.disk_usage(tmp_base)
+        free_mb = free / (1024 * 1024)
+        if free_mb >= required_mb:
+            return
+
+        # 1. Remove incomplete / temporary download files
+        for root, dirs, files in os.walk(tmp_base):
+            for f in files:
+                if f.endswith((".downloading", ".incomplete", ".tmp")):
+                    try:
+                        os.remove(os.path.join(root, f))
+                    except OSError:
+                        pass
+
+        # 2. Remove Xet cache
+        xet_dir = os.path.join(tmp_base, "cache", "xet")
+        if os.path.isdir(xet_dir):
+            shutil.rmtree(xet_dir, ignore_errors=True)
+
+        # 3. Clean Hugging Face hub blobs if they exist
+        hub_blobs = os.path.join(tmp_base, "cache", "huggingface", "hub")
+        if os.path.isdir(hub_blobs):
+            for entry in os.listdir(hub_blobs):
+                if entry.startswith("models--"):
+                    shutil.rmtree(os.path.join(hub_blobs, entry), ignore_errors=True)
+
+        # 4. Remove old audio sessions
+        if os.path.isdir(SESSIONS_DIR):
+            for f in os.listdir(SESSIONS_DIR):
+                try:
+                    os.remove(os.path.join(SESSIONS_DIR, f))
+                except OSError:
+                    pass
+
+        # 5. Remove orphaned trans_job directories
+        for entry in os.listdir(tmp_base):
+            if entry.startswith(("trans_job_", "audio_trans_")):
+                shutil.rmtree(os.path.join(tmp_base, entry), ignore_errors=True)
+
+    except Exception:
+        pass
+
+
+def _download_tiny_model_direct(target_dir: str) -> bool:
+    """
+    Downloads faster-whisper-tiny model files directly to target_dir using streamed
+    HTTP chunks without intermediate blob storage, lock directories, or CAS chunk tables.
+    Total disk footprint is strictly ~75 MB.
+    """
+    import urllib.request
+    try:
+        os.makedirs(target_dir, exist_ok=True)
+        base_url = "https://huggingface.co/Systran/faster-whisper-tiny/resolve/main"
+        required_files = ["config.json", "vocabulary.txt", "tokenizer.json", "model.bin"]
+        for fname in required_files:
+            fpath = os.path.join(target_dir, fname)
+            if os.path.isfile(fpath) and os.path.getsize(fpath) > 100:
+                continue
+            tmp_fpath = fpath + ".downloading"
+            url = f"{base_url}/{fname}"
+            req = urllib.request.Request(
+                url,
+                headers={"User-Agent": "AudioTranslator-Vercel/1.0"}
+            )
+            with urllib.request.urlopen(req, timeout=45) as resp, open(tmp_fpath, "wb") as out_f:
+                shutil.copyfileobj(resp, out_f, length=128 * 1024)
+            os.replace(tmp_fpath, fpath)
+        return True
+    except Exception:
+        return False
 
 
 # ---------------------------------------------------------------------------
@@ -455,6 +543,9 @@ def get_whisper_model():
     if _cached_whisper_model is None:
         with _model_lock:
             if _cached_whisper_model is None:
+                # Proactively ensure at least 150 MB of free disk space before loading
+                ensure_tmp_disk_space(required_mb=150)
+
                 try:
                     from faster_whisper import WhisperModel
                 except ImportError as e:
@@ -463,12 +554,12 @@ def get_whisper_model():
                         "pip install faster-whisper"
                     ) from e
 
-                model_size = os.environ.get("WHISPER_MODEL", "tiny" if (os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME")) else "base")
+                is_serverless = bool(os.environ.get("VERCEL") or os.environ.get("AWS_LAMBDA_FUNCTION_NAME"))
+                model_size = os.environ.get("WHISPER_MODEL", "tiny" if is_serverless else "base")
                 compute_type = os.environ.get("WHISPER_COMPUTE_TYPE", "int8")
                 device = os.environ.get("WHISPER_DEVICE", "cpu")
                 cpu_threads = min(4, os.cpu_count() or 1)
 
-                # Ensure download_root is writable in serverless environments (e.g. Vercel, AWS Lambda)
                 download_root = os.environ.get("WHISPER_DOWNLOAD_ROOT")
                 if not download_root:
                     download_root = os.path.join(tmp_base, "whisper_models")
@@ -477,9 +568,14 @@ def get_whisper_model():
                 except Exception:
                     pass
 
-                # Direct single-copy download to model_dir to avoid duplicate blobs & CAS reconstruction
                 model_dir = os.path.join(download_root, f"faster-whisper-{model_size}")
                 model_bin = os.path.join(model_dir, "model.bin")
+
+                # If model is tiny and not yet downloaded, try direct lightweight stream download
+                if model_size == "tiny" and not (os.path.isdir(model_dir) and os.path.isfile(model_bin)):
+                    _download_tiny_model_direct(model_dir)
+
+                # Fallback to faster_whisper.download_model if direct download wasn't used or failed
                 if not (os.path.isdir(model_dir) and os.path.isfile(model_bin)):
                     try:
                         from faster_whisper import download_model

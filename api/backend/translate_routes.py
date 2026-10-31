@@ -32,7 +32,8 @@ from backend.translator import (
     convert_mp3_to_wav,
     list_supported_languages,
     SUPPORTED_LANGUAGES,
-    ALLOWED_EXTENSIONS
+    ALLOWED_EXTENSIONS,
+    ensure_tmp_disk_space
 )
 
 router = APIRouter(tags=["Audio Translator"])
@@ -86,6 +87,7 @@ def cleanup_old_jobs():
                                 shutil.rmtree(full_p, ignore_errors=True)
                         except OSError:
                             pass
+        ensure_tmp_disk_space(required_mb=150)
     except Exception:
         pass
 

@@ -55,6 +55,13 @@ os.environ["HF_HUB_DISABLE_DISK_SPACE_WARNING"] = "1"
 os.environ["HF_HUB_DISABLE_EXPERIMENTAL_WARNING"] = "1"
 os.environ["XET_CACHE_DIR"] = os.path.join(tmp_base, "cache", "xet")
 
+try:
+    import huggingface_hub.constants as _hf_constants
+    _hf_constants.HF_HUB_DISABLE_XET = True
+    _hf_constants.HF_HUB_ENABLE_HF_TRANSFER = False
+except Exception:
+    pass
+
 from fastapi import Request
 from backend.main import app
 

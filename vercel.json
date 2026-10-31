@@ -13,8 +13,8 @@
   ],
   "functions": {
     "api/index.py": {
-      "includeFiles": "{backend/**,api/backend/**}",
-      "excludeFiles": "{test_*.py,*.wav,*.mp3,*.md,Dockerfile,render.yaml,Procfile,numpy_project.py,runcode.json}"
+      "includeFiles": "backend/**",
+      "excludeFiles": "{test_*.py,*.wav,*.mp3,*.md,Dockerfile,render.yaml,Procfile,numpy_project.py,runcode.json,LICENSE}"
     }
   }
 }

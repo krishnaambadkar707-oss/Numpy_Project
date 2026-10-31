@@ -1,6 +1,7 @@
 import os
 import time
 import uuid
+import shutil
 import numpy as np
 from typing import Dict, Any, Optional
 from fastapi import FastAPI, Request, Form, HTTPException, Response
@@ -56,6 +57,9 @@ except Exception:
 def save_session_to_disk(audio_id: str, data: Dict[str, Any]):
     """Persists audio session arrays to disk so serverless instances can recover sessions."""
     try:
+        total, used, free = shutil.disk_usage(tmp_base)
+        if free / (1024 * 1024) < 150:
+            return  # preserve disk space for audio translation & processing
         session_file = os.path.join(SESSIONS_DIR, f"{audio_id}.npz")
         np.savez_compressed(
             session_file,
